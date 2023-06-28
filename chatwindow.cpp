@@ -6,6 +6,7 @@
 #include <QInputDialog>
 #include <QHostAddress>
 #include <QMessageBox>
+#include <QDebug>
 
 ChatWindow::ChatWindow(QWidget *parent)
     : QWidget(parent)
@@ -34,6 +35,8 @@ ChatWindow::ChatWindow(QWidget *parent)
     // connect the click of the "send" button and the press of the enter while typing to the slot that sends the message
     connect(ui.sendButton, &QPushButton::clicked, this, &ChatWindow::sendMessage);
     connect(ui.messageEdit, &QLineEdit::returnPressed, this, &ChatWindow::sendMessage);
+
+    qDebug() << "everything is ok";
 }
 
 ChatWindow::~ChatWindow()
@@ -50,12 +53,14 @@ void ChatWindow::attemptConnection()
         , QLineEdit::Normal
         , QStringLiteral("127.0.0.1")
     );
+    qDebug() << "Host address:" << hostAddress;
     if (hostAddress.isEmpty())
         return; // the user pressed cancel or typed nothing
     // disable the connect button to prevent the user clicking it again
     ui.connectButton->setEnabled(false);
-    // tell the client to connect to the host using the port 1967
-    m_chatClient->connectToServer(QHostAddress(hostAddress), 1967);
+    // tell the client to connect to the host using the port 1984
+    qDebug() << QHostAddress(hostAddress);
+    m_chatClient->connectToServer(QHostAddress(hostAddress), 1984);
 }
 
 
@@ -129,6 +134,8 @@ void ChatWindow::messageReceived(const QString &sender, const QString &text)
     m_chatModel->setData(m_chatModel->index(newRow, 0), int(Qt::AlignLeft | Qt::AlignVCenter), Qt::TextAlignmentRole);
     // scroll the view to display the new message
     ui.chatView->scrollToBottom();
+
+    qDebug() << "Message received" << sender << text;
 }
 
 void ChatWindow::sendMessage()
@@ -188,13 +195,86 @@ void ChatWindow::userJoined(const QString &username)
 
 void ChatWindow::userLeft(const QString &username)
 {
-
+    // store the index of the new row to append to the model containing the messages
+    const int newRow = m_chatModel->rowCount();
+    // insert a row
+    m_chatModel->insertRow(newRow);
+    // store in the model the message to communicate a user left
+    m_chatModel->setData(m_chatModel->index(newRow, 0), tr("%1 Left the Chat").arg(username));
+    // set the alignment for the text
+    m_chatModel->setData(m_chatModel->index(newRow, 0), Qt::AlignCenter, Qt::TextAlignmentRole);
+    // set the color for the text
+    m_chatModel->setData(m_chatModel->index(newRow, 0), QBrush(Qt::red), Qt::ForegroundRole);
+    // scroll the view to display the new message
+    ui.chatView->scrollToBottom();
+    // reset the last printed username
+    m_lastUserName.clear();
 }
+
 
 void ChatWindow::error(QAbstractSocket::SocketError socketError)
 {
-
+    // show a message to the user that informs of what kind of error occurred
+    switch (socketError) {
+    case QAbstractSocket::RemoteHostClosedError:
+    case QAbstractSocket::ProxyConnectionClosedError:
+        return; // handled by disconnectedFromServer
+    case QAbstractSocket::ConnectionRefusedError:
+        QMessageBox::critical(this, tr("Error"), tr("The host refused the connection"));
+        break;
+    case QAbstractSocket::ProxyConnectionRefusedError:
+        QMessageBox::critical(this, tr("Error"), tr("The proxy refused the connection"));
+        break;
+    case QAbstractSocket::ProxyNotFoundError:
+        QMessageBox::critical(this, tr("Error"), tr("Could not find the proxy"));
+        break;
+    case QAbstractSocket::HostNotFoundError:
+        QMessageBox::critical(this, tr("Error"), tr("Could not find the server"));
+        break;
+    case QAbstractSocket::SocketAccessError:
+        QMessageBox::critical(this, tr("Error"), tr("You don't have permissions to execute this operation"));
+        break;
+    case QAbstractSocket::SocketResourceError:
+        QMessageBox::critical(this, tr("Error"), tr("Too many connections opened"));
+        break;
+    case QAbstractSocket::SocketTimeoutError:
+        QMessageBox::warning(this, tr("Error"), tr("Operation timed out"));
+        return;
+    case QAbstractSocket::ProxyConnectionTimeoutError:
+        QMessageBox::critical(this, tr("Error"), tr("Proxy timed out"));
+        break;
+    case QAbstractSocket::NetworkError:
+        QMessageBox::critical(this, tr("Error"), tr("Unable to reach the network"));
+        break;
+    case QAbstractSocket::UnknownSocketError:
+        QMessageBox::critical(this, tr("Error"), tr("An unknown error occurred"));
+        break;
+    case QAbstractSocket::UnsupportedSocketOperationError:
+        QMessageBox::critical(this, tr("Error"), tr("Operation not supported"));
+        break;
+    case QAbstractSocket::ProxyAuthenticationRequiredError:
+        QMessageBox::critical(this, tr("Error"), tr("Your proxy requires authentication"));
+        break;
+    case QAbstractSocket::ProxyProtocolError:
+        QMessageBox::critical(this, tr("Error"), tr("Proxy communication failed"));
+        break;
+    case QAbstractSocket::TemporaryError:
+    case QAbstractSocket::OperationError:
+        QMessageBox::warning(this, tr("Error"), tr("Operation failed, please try again"));
+        return;
+    default:
+        Q_UNREACHABLE();
+    }
+    // enable the button to connect to the server again
+    ui.connectButton->setEnabled(true);
+    // disable the ui to send and display messages
+    ui.sendButton->setEnabled(false);
+    ui.messageEdit->setEnabled(false);
+    ui.chatView->setEnabled(false);
+    // reset the last printed username
+    m_lastUserName.clear();
 }
+
 
 QLayout* ChatWindow::createRootLayout()
 {

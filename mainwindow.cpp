@@ -6,7 +6,6 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    qDebug() << ChatClientCore::getString().c_str();
     auto chatWindow = new ChatWindow();
     setCentralWidget(chatWindow);
 }
